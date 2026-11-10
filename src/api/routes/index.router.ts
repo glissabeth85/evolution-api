@@ -8,6 +8,7 @@ import { StorageRouter } from '@api/integrations/storage/storage.router';
 import { waMonitor } from '@api/server.module';
 import { configService, Database, Facebook } from '@config/env.config';
 import { fetchLatestWaWebVersion } from '@utils/fetchLatestWaWebVersion';
+import { safeCompare } from '@utils/requestPath';
 import { NextFunction, Request, Response, Router } from 'express';
 import fs from 'fs';
 import mimeTypes from 'mime-types';
@@ -48,14 +49,13 @@ const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
 const metricsIPWhitelist = (req: Request, res: Response, next: NextFunction) => {
   const metricsConfig = configService.get('METRICS');
   const allowedIPs = metricsConfig.ALLOWED_IPS?.split(',').map((ip) => ip.trim()) || ['127.0.0.1'];
-  const clientIPs = [
-    req.ip,
-    req.connection.remoteAddress,
-    req.socket.remoteAddress,
-    req.headers['x-forwarded-for'],
-  ].filter((ip) => ip !== undefined);
+  // X-Forwarded-For is client-controlled, so it is not trusted here. Behind a reverse proxy, add the
+  // proxy IP to METRICS_ALLOWED_IPS (or configure Express "trust proxy" so req.ip is the real client).
+  const normalize = (ip?: string) => ip?.replace(/^::ffff:/, '');
+  const clientIPs = [req.ip, req.socket?.remoteAddress].map(normalize).filter((ip) => ip !== undefined);
 
-  if (allowedIPs.filter((ip) => clientIPs.includes(ip)) === 0) {
+  // Previously compared an array to 0 (always false), so the whitelist never blocked anyone.
+  if (!allowedIPs.some((ip) => clientIPs.includes(normalize(ip)))) {
     return res.status(403).send('Forbidden: IP not allowed');
   }
 
@@ -79,9 +79,14 @@ const metricsBasicAuth = (req: Request, res: Response, next: NextFunction) => {
   }
 
   const credentials = Buffer.from(auth.slice(6), 'base64').toString();
-  const [user, pass] = credentials.split(':');
+  const sepIndex = credentials.indexOf(':');
+  const user = sepIndex >= 0 ? credentials.slice(0, sepIndex) : credentials;
+  const pass = sepIndex >= 0 ? credentials.slice(sepIndex + 1) : '';
 
-  if (user !== metricsUser || pass !== metricsPass) {
+  // Evaluate both comparisons (constant time) to avoid leaking which one failed.
+  const userOk = safeCompare(user, metricsUser);
+  const passOk = safeCompare(pass, metricsPass);
+  if (!userOk || !passOk) {
     return res.status(401).send('Invalid credentials');
   }
 

@@ -15,6 +15,10 @@ class Postgres {
     } else {
       this.pool = new Pool({
         connectionString,
+        // Chatwoot stores `timestamp without time zone` columns as UTC (Rails forces UTC on its
+        // own sessions). Force UTC here too so NOW()/to_timestamp() don't depend on the server TZ.
+        // An `options` param in the connection URI still takes precedence.
+        options: '-c timezone=UTC',
         ssl: {
           rejectUnauthorized: false,
         },

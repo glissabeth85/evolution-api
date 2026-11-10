@@ -25,7 +25,7 @@ export const chatwootSchema: JSONSchema7 = {
   type: 'object',
   properties: {
     enabled: { type: 'boolean', enum: [true, false] },
-    accountId: { type: 'string' },
+    accountId: { type: 'string', pattern: '^\\d+$' },
     token: { type: 'string' },
     url: { type: 'string' },
     signMsg: { type: 'boolean', enum: [true, false] },
