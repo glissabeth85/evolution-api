@@ -29,6 +29,11 @@ RUN chmod +x ./Docker/scripts/* && dos2unix ./Docker/scripts/*
 
 RUN ./Docker/scripts/generate_database.sh
 
+# Source maps raise build peak memory from ~0.4 GB to ~1.6 GB; off by default so the image
+# builds on small servers. Build with --build-arg TSUP_SOURCEMAP=true to include them.
+ARG TSUP_SOURCEMAP=false
+ENV TSUP_SOURCEMAP=$TSUP_SOURCEMAP
+
 RUN npm run build
 
 FROM node:24-alpine AS final
