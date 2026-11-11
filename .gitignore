@@ -46,3 +46,42 @@ lerna-debug.log*
 .tool-versions
 
 /prisma/migrations/*
+
+# --- Security hardening (osom) ---
+# Environment files: never commit real configuration (keep only the examples)
+.env*
+**/.env*
+!.env.example
+!env.example
+
+# Keys, certificates and credentials
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.crt
+*.csr
+*.keystore
+id_rsa*
+id_ed25519*
+*credentials*.json
+*service-account*.json
+.npmrc
+.yarnrc.yml
+
+# WhatsApp sessions, local stores and data dumps (contain sessions/PII)
+/backups/
+*.dump
+*.sql.gz
+*.bak
+
+# Local monitoring configs (only the .example versions are tracked)
+/prometheus.yml
+/grafana-dashboard.json
+
+# Local overrides and tooling
+docker-compose.override.y*ml
+/coverage/
+/logs/
+.claude/settings.local.json

@@ -19,6 +19,7 @@ import { onUnexpectedError } from '@config/error.config';
 import { Logger } from '@config/logger.config';
 import { ROOT_DIR } from '@config/path.config';
 import * as Sentry from '@sentry/node';
+import { assertSecureApiKey } from '@utils/assertSecureApiKey';
 import { ServerUP } from '@utils/server-up';
 import axios from 'axios';
 import compression from 'compression';
@@ -32,6 +33,7 @@ async function initWA() {
 
 async function bootstrap() {
   const logger = new Logger('SERVER');
+  assertSecureApiKey(configService.get<Auth>('AUTHENTICATION').API_KEY.KEY, logger);
   const app = express();
 
   let providerFiles: ProviderFiles = null;

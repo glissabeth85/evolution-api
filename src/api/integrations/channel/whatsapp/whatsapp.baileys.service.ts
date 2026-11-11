@@ -1884,16 +1884,30 @@ export class BaileysStartupService extends ChannelStartupService {
               const call = events.call[0];
 
               if (settings?.rejectCall && call.status == 'offer') {
-                this.client.rejectCall(call.id, call.from);
+                this.client.rejectCall(call.id, call.from).catch((error) => {
+                  this.logger.error(['Error rejecting call', error?.message, error?.stack]);
+                });
               }
 
               if (settings?.msgCall?.trim().length > 0 && call.status == 'offer') {
-                if (call.from.endsWith('@lid')) {
-                  call.from = await this.client.signalRepository.lidMapping.getPNForLID(call.from as string);
-                }
-                const msg = await this.client.sendMessage(call.from, { text: settings.msgCall });
+                // Use a local target so the CALL webhook keeps the original caller JID,
+                // and isolate failures so they don't abort the rest of the event batch.
+                try {
+                  let target = call.from;
+                  if (target?.endsWith('@lid')) {
+                    const pn = await this.client.signalRepository.lidMapping.getPNForLID(target);
+                    if (pn) target = pn;
+                  }
 
-                this.client.ev.emit('messages.upsert', { messages: [msg], type: 'notify' });
+                  if (target) {
+                    const msg = await this.client.sendMessage(target, { text: settings.msgCall });
+                    if (msg) {
+                      this.client.ev.emit('messages.upsert', { messages: [msg], type: 'notify' });
+                    }
+                  }
+                } catch (error) {
+                  this.logger.error(['Error sending msgCall', call.from, error?.message, error?.stack]);
+                }
               }
 
               this.sendDataWebhook(Events.CALL, call);
@@ -1944,11 +1958,10 @@ export class BaileysStartupService extends ChannelStartupService {
             if (events['presence.update']) {
               const payload = events['presence.update'];
 
-              if (settings?.groupsIgnore && payload.id.includes('@g.us')) {
-                return;
+              // Skip only this event; returning here would drop the rest of the batch.
+              if (!(settings?.groupsIgnore && payload.id?.includes('@g.us'))) {
+                this.sendDataWebhook(Events.PRESENCE_UPDATE, payload);
               }
-
-              this.sendDataWebhook(Events.PRESENCE_UPDATE, payload);
             }
 
             if (!settings?.groupsIgnore) {
