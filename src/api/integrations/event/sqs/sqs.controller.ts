@@ -22,17 +22,33 @@ export class SqsController extends EventController implements EventControllerInt
     }
 
     const awsConfig = configService.get<Sqs>('SQS');
+    const region = awsConfig.REGION?.trim();
+
+    if (!region || !/^[a-z0-9-]+$/.test(region) || !awsConfig.ACCOUNT_ID?.trim()) {
+      this.logger.error(
+        `SQS not initialized: SQS_REGION ("${awsConfig.REGION}") and SQS_ACCOUNT_ID must be set, e.g. SQS_REGION=us-east-1`,
+      );
+      return;
+    }
+
+    // The AWS SDK also reads AWS_ENDPOINT_URL / AWS_ENDPOINT_URL_SQS from the environment. A value meant for
+    // another service (e.g. S3/MinIO) or without "https://" makes every SQS call fail with "TypeError: Invalid URL".
+    // Pinning the endpoint keeps SQS independent of those variables.
+    const overrides = ['AWS_ENDPOINT_URL', 'AWS_ENDPOINT_URL_SQS'].filter((name) => process.env[name]);
+    if (overrides.length) {
+      this.logger.warn(`Ignoring ${overrides.join(', ')} for SQS; using the regional AWS endpoint instead`);
+    }
 
     this.sqs = new SQS({
       credentials: {
-        accessKeyId: awsConfig.ACCESS_KEY_ID,
-        secretAccessKey: awsConfig.SECRET_ACCESS_KEY,
+        accessKeyId: awsConfig.ACCESS_KEY_ID?.trim(),
+        secretAccessKey: awsConfig.SECRET_ACCESS_KEY?.trim(),
       },
-
-      region: awsConfig.REGION,
+      region,
+      endpoint: `https://sqs.${region}.amazonaws.com`,
     });
 
-    this.logger.info('SQS initialized');
+    this.logger.info(`SQS initialized (region ${region})`);
 
     const sqsConfig = configService.get<Sqs>('SQS');
     if (this.sqs && sqsConfig.GLOBAL_ENABLED) {
@@ -126,7 +142,7 @@ export class SqsController extends EventController implements EventControllerInt
             ? 'singlequeue'
             : `${event.replace('.', '_').toLowerCase()}`;
         const queueName = `${prefixName}_${eventFormatted}.fifo`;
-        const sqsUrl = `https://sqs.${sqsConfig.REGION}.amazonaws.com/${sqsConfig.ACCOUNT_ID}/${queueName}`;
+        const sqsUrl = `https://sqs.${sqsConfig.REGION.trim()}.amazonaws.com/${sqsConfig.ACCOUNT_ID.trim()}/${queueName}`;
 
         const message = {
           ...(extra ?? {}),
