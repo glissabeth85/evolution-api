@@ -1,6 +1,42 @@
+# VCS and tooling
 .git
+.github
+.husky
+.vscode
+.idea
+.cursor
+.claude
+
+# Docker files themselves
 *Dockerfile*
 *docker-compose*
-.env
+
+# Secrets: never bake into the image (configure via env at runtime)
+.env*
+**/.env*
+!.env.example
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.crt
+**/*.jks
+**/.npmrc
+
+# Local data, sessions and dumps
+instances
+store
+backups
+docker-data
+docker-compose-data
+**/*.dump
+**/*.bak
+logs
+**/*.log
+coverage
+temp
+
+# Build artifacts (rebuilt inside the image)
 node_modules
 dist
+evolution-manager-v2

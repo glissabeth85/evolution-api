@@ -4,6 +4,7 @@ import { GetParticipant, GroupInvite } from '@api/dto/group.dto';
 import { InstanceDto } from '@api/dto/instance.dto';
 import { Logger } from '@config/logger.config';
 import { BadRequestException } from '@exceptions';
+import { isInstanceCreateRoute } from '@utils/requestPath';
 import { Request } from 'express';
 import { JSONSchema7 } from 'json-schema';
 import { validate } from 'jsonschema';
@@ -31,13 +32,12 @@ export abstract class RouterBroker {
 
     const ref = new ClassRef();
     const body = request.body;
-    const instance = request.params as unknown as InstanceDto;
+    // Build a NEW object: route params (already checked by the auth/instance guards) always win.
+    // Previously the query string was merged INTO req.params, so `?instanceName=other` let an
+    // instance token act on another tenant's instance.
+    const instance = { ...(request?.query || {}), ...request.params } as unknown as InstanceDto;
 
-    if (request?.query && Object.keys(request.query).length > 0) {
-      Object.assign(instance, request.query);
-    }
-
-    if (request.originalUrl.includes('/instance/create')) {
+    if (isInstanceCreateRoute(request)) {
       Object.assign(instance, body);
     }
 

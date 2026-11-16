@@ -1,0 +1,75 @@
+diff --git a/node_modules/baileys/lib/Socket/messages-recv.js b/node_modules/baileys/lib/Socket/messages-recv.js
+index f2e2e10..a02b4a0 100644
+--- a/node_modules/baileys/lib/Socket/messages-recv.js
++++ b/node_modules/baileys/lib/Socket/messages-recv.js
+@@ -844,7 +844,9 @@ export const makeMessagesRecvSocket = (config) => {
+             fromMe,
+             participant: attrs.participant
+         };
+-        if (shouldIgnoreJid(remoteJid) && remoteJid !== S_WHATSAPP_NET) {
++        // [evolution patch] retry receipts are needed to recover messages WE sent
++        // (e.g. to groups while groupsIgnore=true), so never drop them here.
++        if (attrs.type !== 'retry' && shouldIgnoreJid(remoteJid) && remoteJid !== S_WHATSAPP_NET) {
+             logger.debug({ remoteJid }, 'ignoring receipt from jid');
+             await sendMessageAck(node);
+             return;
+@@ -1166,12 +1168,25 @@ export const makeMessagesRecvSocket = (config) => {
+             return exec(node, false).catch(err => onUnexpectedError(err, identifier));
+         }
+     };
++    // [evolution patch] Some accounts now get contacts' statuses as a top-level <status>
++    // stanza. It must be acked, otherwise the server ends the stream ~50 min later with
++    // <stream:error><ack class="status"/></stream:error> and holds back new messages.
++    // Backport of WhiskeySockets/Baileys#2883.
++    const handleStatus = async (node) => {
++        try {
++            await sendMessageAck(node);
++        }
++        catch (error) {
++            onUnexpectedError(error, 'acking status stanza');
++        }
++    };
+     const makeOfflineNodeProcessor = () => {
+         const nodeProcessorMap = new Map([
+             ['message', handleMessage],
+             ['call', handleCall],
+             ['receipt', handleReceipt],
+-            ['notification', handleNotification]
++            ['notification', handleNotification],
++            ['status', handleStatus]
+         ]);
+         const nodes = [];
+         let isProcessing = false;
+@@ -1189,11 +1204,20 @@ export const makeMessagesRecvSocket = (config) => {
+                         onUnexpectedError(new Error(`unknown offline node type: ${type}`), 'processing offline node');
+                         continue;
+                     }
+-                    await nodeProcessor(node);
++                    // [evolution patch] isolate failures per node (as in rc13)
++                    try {
++                        await nodeProcessor(node);
++                    }
++                    catch (error) {
++                        onUnexpectedError(error, 'processing offline node');
++                    }
+                 }
+                 isProcessing = false;
+             };
+-            promise().catch(error => onUnexpectedError(error, 'processing offline nodes'));
++            promise().catch(error => {
++                isProcessing = false;
++                onUnexpectedError(error, 'processing offline nodes');
++            });
+         };
+         return { enqueue };
+     };
+@@ -1220,6 +1244,9 @@ export const makeMessagesRecvSocket = (config) => {
+     ws.on('CB:notification', async (node) => {
+         await processNode('notification', node, 'handling notification', handleNotification);
+     });
++    ws.on('CB:status', async (node) => {
++        await processNode('status', node, 'acking status stanza', handleStatus).catch(error => onUnexpectedError(error, 'acking status stanza'));
++    });
+     ws.on('CB:ack,class:message', (node) => {
+         handleBadAck(node).catch(error => onUnexpectedError(error, 'handling bad ack'));
+     });

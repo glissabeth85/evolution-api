@@ -26,7 +26,12 @@ export const instanceSchema: JSONSchema7 = {
   type: 'object',
   properties: {
     // Instance
-    instanceName: { type: 'string' },
+    // No path separators, ".." or control characters: the name is used in filesystem paths and namespaces.
+    instanceName: {
+      type: 'string',
+      pattern: '^(?!.*\\.\\.)[^/\\\\\\u0000-\\u001f]+$',
+      description: '"instanceName" must not contain "/", "\\", ".." or control characters',
+    },
     token: { type: 'string' },
     number: { type: 'string', pattern: '^\\d+[\\.@\\w-]+' },
     businessId: { type: 'string' },

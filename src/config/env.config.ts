@@ -866,7 +866,8 @@ export class ConfigService {
       },
       AUTHENTICATION: {
         API_KEY: {
-          KEY: process.env.AUTHENTICATION_API_KEY || 'BQYHJGJHJ',
+          // No insecure fallback: startup is refused if unset or a public default (see assertSecureApiKey).
+          KEY: process.env.AUTHENTICATION_API_KEY,
         },
         EXPOSE_IN_FETCH_INSTANCES: process.env?.AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES === 'true',
       },

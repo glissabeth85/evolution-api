@@ -10,7 +10,7 @@ import { NotFoundException } from '@exceptions';
 import { execFileSync } from 'child_process';
 import EventEmitter2 from 'eventemitter2';
 import { rmSync } from 'fs';
-import { join } from 'path';
+import { join, resolve, sep } from 'path';
 
 import { CacheService } from './cache.service';
 
@@ -190,7 +190,14 @@ export class WAMonitoringService {
 
   public async cleaningStoreData(instanceName: string) {
     if (this.configService.get<Chatwoot>('CHATWOOT').ENABLED) {
-      const instancePath = join(STORE_DIR, 'chatwoot', instanceName);
+      // instanceName is user-controlled: make sure the target stays inside STORE_DIR/chatwoot
+      // (a name like "../../.." would otherwise recursively delete the application root).
+      const baseDir = resolve(STORE_DIR, 'chatwoot');
+      const instancePath = resolve(baseDir, instanceName);
+      if (!instanceName || !instancePath.startsWith(baseDir + sep)) {
+        this.logger.error(`Refusing to clean store data outside ${baseDir}: ${instanceName}`);
+        return;
+      }
       execFileSync('rm', ['-rf', instancePath]);
     }
 
